@@ -31,14 +31,20 @@ from PyQt5.QtGui import (
 )
 
 # ============================================================
-# ПУТИ
+# ПУТИ (работают и в .py, и в .exe)
 # ============================================================
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+if getattr(sys, 'frozen', False):
+    # Запущено как .exe — берём папку с .exe
+    BASE_DIR = os.path.dirname(sys.executable)
+else:
+    # Запущено как .py — берём папку со скриптом
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
 DATA_DIR = os.path.join(BASE_DIR, 'data')
 DESIGN_FILE = os.path.join(DATA_DIR, 'design.json')
 POSITION_FILE = os.path.join(DATA_DIR, 'position.json')
 MEMORY_FILE = os.path.join(DATA_DIR, 'memory.json')
-SCHEDULE_FILE = os.path.join(DATA_DIR, 'schedule.json')
+BELLS_FILE = os.path.join(DATA_DIR, 'bells.json')
 
 os.makedirs(DATA_DIR, exist_ok=True)
 
@@ -51,46 +57,41 @@ THEMES = {
         'name': '🌑 Тёмная',
         'bg_fill_mode': 'gradient', 'color1': '#1a1f2e', 'color2': '#283c64',
         'alpha': 90, 'time_mode': 'solid', 'time_color': '#ffffff',
-        'pair_color': '#d0e0ff', 'info_color': '#8892b0', 'date_color': '#8892b0',
-        'pair_bg_color': '#1e2438', 'show_pair_bg': True,
+        'info_color': '#8892b0', 'date_color': '#8892b0',
         'time_shadow': False, 'time_outline': False, 'time_pulse': False,
     },
     'neon': {
         'name': '💜 Неон',
         'bg_fill_mode': 'solid', 'color1': '#0a0014', 'color2': '#0a0014',
         'alpha': 85, 'time_mode': 'solid', 'time_color': '#ff00ff',
-        'pair_color': '#00ffff', 'info_color': '#ff88ff', 'date_color': '#00ffff',
-        'pair_bg_color': '#1a0033', 'show_pair_bg': True,
+        'info_color': '#ff88ff', 'date_color': '#00ffff',
         'time_shadow': True, 'time_outline': False, 'time_pulse': True,
     },
     'retro': {
         'name': '🕹️ Ретро',
         'bg_fill_mode': 'gradient', 'color1': '#2b1810', 'color2': '#4a2c1a',
         'alpha': 95, 'time_mode': 'solid', 'time_color': '#ffb000',
-        'pair_color': '#ffd700', 'info_color': '#d4a574', 'date_color': '#ffb000',
-        'pair_bg_color': '#3d2416', 'show_pair_bg': True,
+        'info_color': '#d4a574', 'date_color': '#ffb000',
         'time_shadow': True, 'time_outline': False, 'time_pulse': False,
     },
     'minimal': {
         'name': '⬜ Минимал',
         'bg_fill_mode': 'transparent', 'color1': '#000000', 'color2': '#000000',
         'alpha': 0, 'time_mode': 'solid', 'time_color': '#ffffff',
-        'pair_color': '#aaaaaa', 'info_color': '#777777', 'date_color': '#777777',
-        'pair_bg_color': '#000000', 'show_pair_bg': False,
+        'info_color': '#777777', 'date_color': '#777777',
         'time_shadow': False, 'time_outline': False, 'time_pulse': False,
     },
     'rainbow': {
         'name': '🌈 Радуга',
         'bg_fill_mode': 'gradient', 'color1': '#1a0033', 'color2': '#003366',
         'alpha': 80, 'time_mode': 'rainbow', 'time_color': '#ffffff',
-        'pair_color': '#ffff00', 'info_color': '#ff88ff', 'date_color': '#00ffff',
-        'pair_bg_color': '#330066', 'show_pair_bg': True,
+        'info_color': '#ff88ff', 'date_color': '#00ffff',
         'time_shadow': True, 'time_outline': False, 'time_pulse': False,
     },
 }
 
 # ============================================================
-# НАСТРОЙКИ ПО УМОЛЧАНИЮ (ПУСТОЙ ШАБЛОН)
+# НАСТРОЙКИ ПО УМОЛЧАНИЮ
 # ============================================================
 DEFAULT_SETTINGS = {
     'bg_fill_mode': 'gradient',
@@ -98,8 +99,6 @@ DEFAULT_SETTINGS = {
     'color2': '#283c64',
     'alpha': 90,
     'corner_radius': 8,
-    'pair_bg_color': '#1e2438',
-    'show_pair_bg': True,
     'time_mode': 'solid',
     'time_color': '#ffffff',
     'time_gradient_color1': '#ff6b9d',
@@ -107,7 +106,6 @@ DEFAULT_SETTINGS = {
     'time_rainbow_speed': 5,
     'time_rainbow_mode': 'line',
     'time_font_size': 36,
-    'pair_color': '#d0e0ff',
     'info_color': '#8892b0',
     'date_color': '#8892b0',
     'time_shadow': False,
@@ -117,8 +115,6 @@ DEFAULT_SETTINGS = {
     'time_pulse': False,
     'show_date': True,
     'date_format': 'day_month_year',
-    'show_tomorrow': False,
-    'tomorrow_color': '#8892b0',
     'auto_hide_fullscreen': True,
     'smart_load': True,
     'window_width': 280,
@@ -126,79 +122,68 @@ DEFAULT_SETTINGS = {
     'pos_x': 50,
     'pos_y': 50,
     'theme': 'custom',
+    'schedule_days': 6,           # 5 или 6 дней
+    'sunday_enabled': False,      # воскресенье — учебный?
 }
 
 # ============================================================
-# ПУСТОЕ РАСПИСАНИЕ
+# ЗВОНКИ ПО УМОЛЧАНИЮ
 # ============================================================
-DEFAULT_BELLS = {
-    'monday': [('08:00', '08:45'), ('09:00', '10:30'), ('10:40', '12:10'), ('12:30', '14:00')],
-    'other': [('08:00', '09:30'), ('09:40', '11:10'), ('11:30', '13:00'), ('13:10', '14:40')],
-}
+DEFAULT_BELLS_MONDAY = [
+    ['08:00', '08:45'],
+    ['09:00', '10:30'],
+    ['10:40', '12:10'],
+    ['12:30', '14:00'],
+    ['14:10', '15:40'],
+]
 
-DEFAULT_WEEK = {
-    1: [None, None, None, None],
-    2: [None, None, None, None],
-    3: [None, None, None, None],
-    4: [None, None, None, None],
-    5: [None, None, None, None],
-    6: [None, None, None, None],
-}
+DEFAULT_BELLS_OTHER = [
+    ['08:00', '09:30'],
+    ['09:40', '11:10'],
+    ['11:30', '13:00'],
+    ['13:10', '14:40'],
+    ['14:50', '16:20'],
+]
 
 # ============================================================
-# ЗАГРУЗКА РАСПИСАНИЯ
+# ЗВОНКИ — ЗАГРУЗКА/СОХРАНЕНИЕ
 # ============================================================
-def load_schedule():
+def load_bells():
     default = {
-        'bells_monday': [list(b) for b in DEFAULT_BELLS['monday']],
-        'bells_other': [list(b) for b in DEFAULT_BELLS['other']],
-        'week1': _sched_to_json(DEFAULT_WEEK),
-        'week2': _sched_to_json(DEFAULT_WEEK),
+        'monday': [list(b) for b in DEFAULT_BELLS_MONDAY],
+        'other': [list(b) for b in DEFAULT_BELLS_OTHER],
     }
-    if os.path.exists(SCHEDULE_FILE):
+    if os.path.exists(BELLS_FILE):
         try:
-            with open(SCHEDULE_FILE, 'r', encoding='utf-8') as f:
+            with open(BELLS_FILE, 'r', encoding='utf-8') as f:
                 data = json.load(f)
-            for k, v in default.items():
-                if k not in data:
-                    data[k] = v
-            return data
+            if isinstance(data, dict):
+                for k, v in default.items():
+                    if k not in data:
+                        data[k] = v
+                return data
         except Exception as e:
-            print('[Schedule] Ошибка загрузки:', e)
-    save_schedule(default)
-    print('[Schedule] Создан schedule.json')
+            print('[Bells] Ошибка загрузки:', e)
+    save_bells(default)
+    print('[Bells] Создан bells.json')
     return default
 
-def save_schedule(s):
+def save_bells(bells):
     try:
-        with open(SCHEDULE_FILE, 'w', encoding='utf-8') as f:
-            json.dump(s, f, ensure_ascii=False, indent=2)
+        with open(BELLS_FILE, 'w', encoding='utf-8') as f:
+            json.dump(bells, f, ensure_ascii=False, indent=2)
     except Exception as e:
-        print('[Schedule] Ошибка сохранения:', e)
+        print('[Bells] Ошибка сохранения:', e)
 
-def _sched_to_json(sched):
-    return {str(k): v for k, v in sched.items()}
+bells_monday = []
+bells_other = []
 
-def _sched_from_json(data):
-    return {int(k): v for k, v in data.items()}
-
-# Глобальные переменные (заполнятся из файла)
-bell_schedule = {'monday': [], 'other': []}
-schedule_week1 = {}
-schedule_week2 = {}
-
-def apply_schedule_from_file():
-    """Читает schedule.json и заполняет глобальные переменные."""
-    global bell_schedule, schedule_week1, schedule_week2
-    s = load_schedule()
-    try:
-        bell_schedule['monday'] = [tuple(b) for b in s.get('bells_monday', [])]
-        bell_schedule['other'] = [tuple(b) for b in s.get('bells_other', [])]
-        schedule_week1 = _sched_from_json(s.get('week1', {}))
-        schedule_week2 = _sched_from_json(s.get('week2', {}))
-        print('[Schedule] Расписание применено')
-    except Exception as e:
-        print('[Schedule] Ошибка применения:', e)
+def apply_bells_from_file():
+    global bells_monday, bells_other
+    data = load_bells()
+    bells_monday = data.get('monday', [])
+    bells_other = data.get('other', [])
+    print(f'[Bells] Пн: {len(bells_monday)}, Вт-Сб: {len(bells_other)}')
 
 # ============================================================
 # ОФОРМЛЕНИЕ
@@ -234,9 +219,6 @@ def reset_design():
     except Exception as e:
         print('[Design] Ошибка удаления:', e)
 
-# ============================================================
-# ПОЗИЦИЯ
-# ============================================================
 def load_position():
     default = {'pos_x': DEFAULT_SETTINGS['pos_x'], 'pos_y': DEFAULT_SETTINGS['pos_y']}
     if os.path.exists(POSITION_FILE):
@@ -259,9 +241,6 @@ def save_position(x, y):
     except Exception as e:
         print('[Position] Ошибка сохранения:', e)
 
-# ============================================================
-# ПАМЯТЬ
-# ============================================================
 def load_memory():
     default = {
         'session_started': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
@@ -294,9 +273,6 @@ def reset_memory():
     except Exception as e:
         print('[Memory] Ошибка удаления:', e)
 
-# ============================================================
-# СКЛЕЙКА
-# ============================================================
 def load_settings():
     design = load_design()
     position = load_position()
@@ -441,34 +417,11 @@ STARTUP_LOAD_CHECKS = 3
 STARTUP_CHECK_INTERVAL = 500
 
 # ============================================================
-# ЛОГИКА РАСПИСАНИЯ
+# ЛОГИКА (ТОЛЬКО ПО ЗВОНКАМ!)
 # ============================================================
 def to_minutes(t):
     h, m = map(int, t.split(':'))
     return h * 60 + m
-
-def get_week_number(dt):
-    return dt.isocalendar()[1]
-
-def get_bells(weekday):
-    if weekday == 6:
-        return None
-    if weekday == 0:
-        return bell_schedule.get('monday', [])
-    return bell_schedule.get('other', [])
-
-def get_subjects(weekday, subgroup=1):
-    week = get_week_number(datetime.now()) % 2
-    week = 2 if week == 0 else week
-    sched = schedule_week2 if week == 2 else schedule_week1
-    subjects = sched.get(weekday + 1, [])
-    result = []
-    for s in subjects:
-        if s and s.get('name') == 'Информатика':
-            result.append({'name': 'Информатика', 'cab': s.get('cab', '')})
-        else:
-            result.append(s)
-    return result
 
 def format_remain(mins):
     if mins <= 0:
@@ -477,18 +430,64 @@ def format_remain(mins):
     m = mins % 60
     return f'{h} ч {m} мин' if h else f'{m} мин'
 
-def get_tomorrow_pairs():
-    tomorrow = datetime.now() + timedelta(days=1)
-    weekday = tomorrow.weekday()
-    bells = get_bells(weekday)
+def get_status_by_bells():
+    """Возвращает статус ТОЛЬКО по звонкам с учётом дня недели."""
+    global bells_monday, bells_other
+
+    now = datetime.now()
+    weekday = now.weekday()  # 0=Пн, 6=Вс
+    current = now.hour * 60 + now.minute
+
+    schedule_days = SETTINGS.get('schedule_days', 6)
+    sunday_enabled = SETTINGS.get('sunday_enabled', False)
+
+    # Воскресенье
+    if weekday == 6:
+        if not sunday_enabled:
+            return 'Выходной', ''
+        bells = bells_other
+    # Суббота
+    elif weekday == 5:
+        if schedule_days < 6:
+            return 'Выходной', ''
+        bells = bells_other
+    # Понедельник
+    elif weekday == 0:
+        bells = bells_monday
+    # Вт-Пт
+    else:
+        bells = bells_other
+
     if not bells:
-        return []
-    subjects = get_subjects(weekday)
-    result = []
-    for i in range(len(bells)):
-        if i < len(subjects) and subjects[i]:
-            result.append((i + 1, bells[i][0], bells[i][1], subjects[i]['name'], subjects[i].get('cab', '')))
-    return result
+        return 'Нет звонков', ''
+
+    pairs = [(i, to_minutes(b[0]), to_minutes(b[1]))
+             for i, b in enumerate(bells) if len(b) >= 2]
+
+    if not pairs:
+        return 'Нет звонков', ''
+
+    first_start = pairs[0][1]
+    last_end = pairs[-1][2]
+
+    if current < first_start:
+        wait = first_start - current
+        return 'Скоро начало', f'через {format_remain(wait)}'
+
+    if current >= last_end:
+        return 'Занятия закончились', ''
+
+    for i, sm, em in pairs:
+        if sm <= current < em:
+            remain = em - current
+            return f'Идёт {i+1}-я пара', f'до конца {format_remain(remain)}'
+
+    for i, sm, em in pairs:
+        if current < sm:
+            wait = sm - current
+            return 'Перемена', f'через {format_remain(wait)}'
+
+    return 'Нет данных', ''
 
 # ============================================================
 # WINAPI
@@ -547,9 +546,6 @@ def is_fullscreen_on_monitor(widget_monitor):
     mx, my, mw, mh = win_monitor
     return (x <= mx + 5 and y <= my + 5 and w >= mw - 10 and h >= mh - 10)
 
-# ============================================================
-# НАГРУЗКА
-# ============================================================
 def get_system_load():
     cpu = psutil.cpu_percent(interval=None)
     ram = psutil.virtual_memory().percent
@@ -561,12 +557,10 @@ def get_system_load():
 class SettingsDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle('Настройки виджета')
-        self.setWindowFlags(
-            Qt.Dialog | Qt.WindowStaysOnTopHint | Qt.WindowCloseButtonHint
-        )
+        self.setWindowTitle('Настройки')
+        self.setWindowFlags(Qt.Dialog | Qt.WindowStaysOnTopHint | Qt.WindowCloseButtonHint)
         self.setMinimumWidth(480)
-        self.setMinimumHeight(640)
+        self.setMinimumHeight(600)
         self.setStyleSheet("""
             QDialog { background: #1a1f2e; color: #e8edf5; }
             QLabel { color: #e8edf5; }
@@ -599,10 +593,8 @@ class SettingsDialog(QDialog):
                 border-radius: 5px;
                 background: #121725;
             }
-            QCheckBox::indicator:hover { border-color: #7a9cff; }
             QCheckBox::indicator:checked {
-                background: #7ae0b0;
-                border-color: #7ae0b0;
+                background: #7ae0b0; border-color: #7ae0b0;
             }
             QSlider::groove:horizontal {
                 height: 6px; background: #2e354a; border-radius: 3px;
@@ -691,15 +683,6 @@ class SettingsDialog(QDialog):
         self.spin_radius.setValue(self.temp['corner_radius'])
         bg_form.addRow('Скругление углов:', self.spin_radius)
 
-        self.chk_pair_bg = QCheckBox('Показывать фон под названием пары')
-        self.chk_pair_bg.setChecked(self.temp.get('show_pair_bg', True))
-        bg_form.addRow(self.chk_pair_bg)
-
-        self.btn_pair_bg = QPushButton(self.temp.get('pair_bg_color', '#1e2438'))
-        self._style_color_button(self.btn_pair_bg, self.temp.get('pair_bg_color', '#1e2438'))
-        self.btn_pair_bg.clicked.connect(lambda: self.pick_color('pair_bg_color', self.btn_pair_bg))
-        bg_form.addRow('Цвет фона пары:', self.btn_pair_bg)
-
         self.tabs.addTab(bg_widget, '🎨 Фон')
 
         # ================= ВРЕМЯ =================
@@ -764,11 +747,6 @@ class SettingsDialog(QDialog):
         self.time_stack.addWidget(rainbow_widget)
         time_form.addRow(self.time_stack)
 
-        self.btn_pair_color = QPushButton(self.temp['pair_color'])
-        self._style_color_button(self.btn_pair_color, self.temp['pair_color'])
-        self.btn_pair_color.clicked.connect(lambda: self.pick_color('pair_color', self.btn_pair_color))
-        time_form.addRow('Цвет пары:', self.btn_pair_color)
-
         self.btn_info_color = QPushButton(self.temp['info_color'])
         self._style_color_button(self.btn_info_color, self.temp['info_color'])
         self.btn_info_color.clicked.connect(lambda: self.pick_color('info_color', self.btn_info_color))
@@ -824,46 +802,71 @@ class SettingsDialog(QDialog):
 
         self.tabs.addTab(fx_widget, '✨ Эффекты')
 
-        # ================= РАСПИСАНИЕ =================
-        sched_widget = QWidget()
-        sched_layout = QVBoxLayout(sched_widget)
-        sched_layout.setContentsMargins(16, 16, 16, 16)
+        # ================= ЗВОНКИ =================
+        bells_scroll = QScrollArea()
+        bells_scroll.setWidgetResizable(True)
+        bells_widget = QWidget()
+        bells_layout = QVBoxLayout(bells_widget)
+        bells_layout.setContentsMargins(16, 16, 16, 16)
 
-        hint = QLabel(
-            'Формат: "Название|Кабинет" или пусто для окна.\n'
-            'Сохраняется в data/schedule.json'
-        )
-        hint.setStyleSheet('color: #8892b0; font-size: 11px; padding-bottom: 4px;')
-        sched_layout.addWidget(hint)
+        # Настройка дней
+        days_row = QHBoxLayout()
+        days_row.addWidget(QLabel('Учебных дней:'))
+        self.schedule_days_combo = QComboBox()
+        self.schedule_days_combo.addItems(['5 дней (Пн-Пт)', '6 дней (Пн-Сб)'])
+        if SETTINGS.get('schedule_days', 6) == 5:
+            self.schedule_days_combo.setCurrentIndex(0)
+        else:
+            self.schedule_days_combo.setCurrentIndex(1)
+        days_row.addWidget(self.schedule_days_combo)
+        days_row.addStretch()
+        bells_layout.addLayout(days_row)
 
-        # День недели
-        day_row = QHBoxLayout()
-        day_row.addWidget(QLabel('День:'))
-        self.sched_day_combo = QComboBox()
-        self.sched_day_combo.addItems([
-            'Понедельник', 'Вторник', 'Среда', 'Четверг',
-            'Пятница', 'Суббота'
-        ])
-        self.sched_day_combo.currentIndexChanged.connect(self._load_schedule_day)
-        day_row.addWidget(self.sched_day_combo)
-        day_row.addStretch()
-        sched_layout.addLayout(day_row)
+        self.chk_sunday = QCheckBox('Воскресенье — учебный день')
+        self.chk_sunday.setChecked(SETTINGS.get('sunday_enabled', False))
+        bells_layout.addWidget(self.chk_sunday)
 
-        # 6 полей для пар
-        self.sched_fields = []
-        for i in range(6):
+        # Заголовок Пн
+        lbl_mon = QLabel('——— Понедельник ———')
+        lbl_mon.setStyleSheet('color: #b7c9ff; font-weight: bold; padding-top: 10px;')
+        bells_layout.addWidget(lbl_mon)
+
+        hint = QLabel('Формат: 08:00-08:45 (пусто — нет пары)')
+        hint.setStyleSheet('color: #8892b0; font-size: 11px;')
+        bells_layout.addWidget(hint)
+
+        self.bell_fields_monday = []
+        for i in range(7):
             row = QHBoxLayout()
-            lbl = QLabel(f'{i+1} пара:')
-            lbl.setFixedWidth(70)
+            lbl = QLabel(f'{i+1}:')
+            lbl.setFixedWidth(30)
             row.addWidget(lbl)
             le = QLineEdit()
-            le.setPlaceholderText('Предмет|каб. 10 (пусто — окно)')
+            le.setPlaceholderText('08:00-08:45')
             row.addWidget(le)
-            self.sched_fields.append(le)
-            sched_layout.addLayout(row)
+            self.bell_fields_monday.append(le)
+            bells_layout.addLayout(row)
 
-        self.btn_save_sched = QPushButton('💾 Сохранить расписание')
-        self.btn_save_sched.setStyleSheet("""
+        # Заголовок Вт-Сб
+        lbl_other = QLabel('——— Вторник-Суббота ———')
+        lbl_other.setStyleSheet('color: #b7c9ff; font-weight: bold; padding-top: 10px;')
+        bells_layout.addWidget(lbl_other)
+
+        self.bell_fields_other = []
+        for i in range(7):
+            row = QHBoxLayout()
+            lbl = QLabel(f'{i+1}:')
+            lbl.setFixedWidth(30)
+            row.addWidget(lbl)
+            le = QLineEdit()
+            le.setPlaceholderText('08:00-09:30')
+            row.addWidget(le)
+            self.bell_fields_other.append(le)
+            bells_layout.addLayout(row)
+
+        # Кнопка сохранить
+        self.btn_save_bells = QPushButton('💾 Сохранить звонки')
+        self.btn_save_bells.setStyleSheet("""
             QPushButton {
                 background: #2a6045; color: #b7ffd9;
                 border: none; border-radius: 6px; padding: 8px 16px;
@@ -871,37 +874,12 @@ class SettingsDialog(QDialog):
             }
             QPushButton:hover { background: #3a8060; }
         """)
-        self.btn_save_sched.clicked.connect(self._save_schedule)
-        sched_layout.addWidget(self.btn_save_sched)
-
-        # Звонки
-        sched_layout.addWidget(QLabel('——— Расписание звонков ———'))
-        self.bell_fields = []
-        for i in range(4):
-            row = QHBoxLayout()
-            lbl = QLabel(f'{i+1} звонок:')
-            lbl.setFixedWidth(70)
-            row.addWidget(lbl)
-            le = QLineEdit()
-            le.setPlaceholderText('08:00-08:45')
-            row.addWidget(le)
-            self.bell_fields.append(le)
-            sched_layout.addLayout(row)
-
-        self.btn_save_bells = QPushButton('💾 Сохранить звонки')
-        self.btn_save_bells.setStyleSheet("""
-            QPushButton {
-                background: #2a4560; color: #b7d9ff;
-                border: none; border-radius: 6px; padding: 8px 16px;
-                font-weight: bold;
-            }
-            QPushButton:hover { background: #3a6080; }
-        """)
         self.btn_save_bells.clicked.connect(self._save_bells)
-        sched_layout.addWidget(self.btn_save_bells)
+        bells_layout.addWidget(self.btn_save_bells)
+        bells_layout.addStretch()
 
-        sched_layout.addStretch()
-        self.tabs.addTab(sched_widget, '📚 Расписание')
+        bells_scroll.setWidget(bells_widget)
+        self.tabs.addTab(bells_scroll, '🔔 Звонки')
 
         # ================= ПОВЕДЕНИЕ =================
         behavior_box = QWidget()
@@ -927,89 +905,57 @@ class SettingsDialog(QDialog):
 
         self.on_bg_fill_changed(self.bg_fill_combo.currentIndex())
         self.on_time_mode_changed(self.time_mode_combo.currentIndex())
-        self._load_schedule_day(0)
         self._load_bells()
-
-    def _load_schedule_day(self, day_idx):
-        try:
-            day_key = day_idx + 1
-            s = load_schedule()
-            w1 = _sched_from_json(s.get('week1', {}))
-            pairs = w1.get(day_key, [])
-            for i in range(6):
-                if i < len(pairs) and pairs[i]:
-                    name = pairs[i].get('name', '')
-                    cab = pairs[i].get('cab', '')
-                    self.sched_fields[i].setText(f'{name}|{cab}' if cab else name)
-                else:
-                    self.sched_fields[i].setText('')
-        except Exception as e:
-            print('Ошибка _load_schedule_day:', e)
-
-    def _save_schedule(self):
-        try:
-            day_idx = self.sched_day_combo.currentIndex()
-            day_key = day_idx + 1
-            s = load_schedule()
-            w1 = _sched_from_json(s.get('week1', {}))
-            w2 = _sched_from_json(s.get('week2', {}))
-            new_pairs = []
-            for le in self.sched_fields:
-                text = le.text().strip()
-                if not text:
-                    new_pairs.append(None)
-                else:
-                    if '|' in text:
-                        name, cab = text.split('|', 1)
-                        new_pairs.append({'name': name.strip(), 'cab': cab.strip()})
-                    else:
-                        new_pairs.append({'name': text, 'cab': ''})
-            new_pairs = new_pairs[:4]
-            w1[day_key] = new_pairs
-            w2[day_key] = new_pairs
-            s['week1'] = _sched_to_json(w1)
-            s['week2'] = _sched_to_json(w2)
-            save_schedule(s)
-            apply_schedule_from_file()
-            if self.parent() and hasattr(self.parent(), 'update_all'):
-                self.parent().update_all()
-            print(f'[Schedule] Сохранено для дня {day_key}')
-        except Exception as e:
-            print('Ошибка _save_schedule:', e)
 
     def _load_bells(self):
         try:
-            s = load_schedule()
-            bells = s.get('bells_other', [])
-            for i in range(4):
-                if i < len(bells):
-                    self.bell_fields[i].setText(f'{bells[i][0]}-{bells[i][1]}')
+            data = load_bells()
+            mon = data.get('monday', [])
+            for i in range(7):
+                if i < len(mon) and isinstance(mon[i], (list, tuple)) and len(mon[i]) >= 2:
+                    self.bell_fields_monday[i].setText(f'{mon[i][0]}-{mon[i][1]}')
                 else:
-                    self.bell_fields[i].setText('')
+                    self.bell_fields_monday[i].setText('')
+            other = data.get('other', [])
+            for i in range(7):
+                if i < len(other) and isinstance(other[i], (list, tuple)) and len(other[i]) >= 2:
+                    self.bell_fields_other[i].setText(f'{other[i][0]}-{other[i][1]}')
+                else:
+                    self.bell_fields_other[i].setText('')
         except Exception as e:
             print('Ошибка _load_bells:', e)
 
     def _save_bells(self):
         try:
-            s = load_schedule()
-            new_bells = []
-            for le in self.bell_fields:
+            new_monday = []
+            for le in self.bell_fields_monday:
                 text = le.text().strip()
                 if not text:
-                    new_bells.append(['08:00', '08:45'])
-                else:
-                    if '-' in text:
-                        start, end = text.split('-', 1)
-                        new_bells.append([start.strip(), end.strip()])
-                    else:
-                        new_bells.append(['08:00', '08:45'])
-            s['bells_other'] = new_bells
-            s['bells_monday'] = new_bells
-            save_schedule(s)
-            apply_schedule_from_file()
+                    continue
+                if '-' in text:
+                    s, e = text.split('-', 1)
+                    if s.strip() and e.strip():
+                        new_monday.append([s.strip(), e.strip()])
+            new_other = []
+            for le in self.bell_fields_other:
+                text = le.text().strip()
+                if not text:
+                    continue
+                if '-' in text:
+                    s, e = text.split('-', 1)
+                    if s.strip() and e.strip():
+                        new_other.append([s.strip(), e.strip()])
+
+            save_bells({'monday': new_monday, 'other': new_other})
+
+            SETTINGS['schedule_days'] = 5 if self.schedule_days_combo.currentIndex() == 0 else 6
+            SETTINGS['sunday_enabled'] = self.chk_sunday.isChecked()
+            save_design(SETTINGS)
+
+            apply_bells_from_file()
             if self.parent() and hasattr(self.parent(), 'update_all'):
                 self.parent().update_all()
-            print('[Schedule] Звонки сохранены')
+            print(f'[Bells] Пн: {len(new_monday)}, Вт-Сб: {len(new_other)}')
         except Exception as e:
             print('Ошибка _save_bells:', e)
 
@@ -1070,7 +1016,6 @@ class SettingsDialog(QDialog):
         self.temp['auto_hide_fullscreen'] = self.chk_fullscreen.isChecked()
         self.temp['smart_load'] = self.chk_smart.isChecked()
         self.temp['show_date'] = self.chk_show_date.isChecked()
-        self.temp['show_pair_bg'] = self.chk_pair_bg.isChecked()
         self.temp['time_shadow'] = self.chk_shadow.isChecked()
         self.temp['time_outline'] = self.chk_outline.isChecked()
         self.temp['time_pulse'] = self.chk_pulse.isChecked()
@@ -1112,25 +1057,18 @@ class Overlay(QWidget):
         self.time_label.setAlignment(Qt.AlignCenter)
         self.time_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 
-        self.pair_label = QLabel()
-        self.pair_label.setAlignment(Qt.AlignCenter)
-        self.pair_label.setWordWrap(True)
-        self.pair_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.status_label = QLabel()
+        self.status_label.setAlignment(Qt.AlignCenter)
+        self.status_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 
         self.remain_label = QLabel()
         self.remain_label.setAlignment(Qt.AlignCenter)
         self.remain_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 
-        self.tomorrow_label = QLabel()
-        self.tomorrow_label.setAlignment(Qt.AlignCenter)
-        self.tomorrow_label.setWordWrap(True)
-        self.tomorrow_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-
         layout.addWidget(self.date_label)
         layout.addWidget(self.time_label)
-        layout.addWidget(self.pair_label)
+        layout.addWidget(self.status_label)
         layout.addWidget(self.remain_label)
-        layout.addWidget(self.tomorrow_label)
         layout.addStretch()
         self.setLayout(layout)
 
@@ -1174,7 +1112,6 @@ class Overlay(QWidget):
             real_time = now.hour * 60 + now.minute
             shown = getattr(self, '_last_shown_time', None)
             if shown is not None and real_time - shown > 1:
-                print('[Watchdog] Время отстало!')
                 self.update_timer.stop()
                 self.update_timer.start(2000)
                 self.update_all()
@@ -1195,7 +1132,7 @@ class Overlay(QWidget):
         try:
             self.layout().activate()
             hint = self.layout().sizeHint()
-            new_height = max(80, hint.height() + 16)
+            new_height = max(60, hint.height() + 16)
             if new_height != self.height():
                 self.setFixedHeight(new_height)
                 self._safe_move(self.x(), self.y())
@@ -1297,33 +1234,18 @@ class Overlay(QWidget):
     def apply_settings(self):
         try:
             self.setFixedWidth(SETTINGS['window_width'])
-            self.setMinimumHeight(80)
+            self.setMinimumHeight(60)
             self.setMaximumHeight(500)
 
             self.time_label.setStyleSheet("")
             self.date_label.setFont(QFont('Segoe UI', 10))
             self.date_label.setStyleSheet(f"color: {SETTINGS['date_color']};")
 
-            self.pair_label.setFont(QFont('Segoe UI', 13))
-            if SETTINGS.get('show_pair_bg', True):
-                self.pair_label.setStyleSheet(
-                    f"color: {SETTINGS['pair_color']};"
-                    f"background: {SETTINGS['pair_bg_color']};"
-                    f"border-radius: 6px; padding: 4px; margin: 2px;"
-                )
-            else:
-                self.pair_label.setStyleSheet(f"color: {SETTINGS['pair_color']};")
+            self.status_label.setFont(QFont('Segoe UI', 14, QFont.Bold))
+            self.status_label.setStyleSheet(f"color: {SETTINGS['info_color']};")
 
             self.remain_label.setFont(QFont('Segoe UI', 11))
             self.remain_label.setStyleSheet(f"color: {SETTINGS['info_color']};")
-
-            self.tomorrow_label.setFont(QFont('Segoe UI', 9))
-            self.tomorrow_label.setStyleSheet(f"color: {SETTINGS.get('tomorrow_color', '#8892b0')};")
-
-            if SETTINGS.get('show_tomorrow', False):
-                self.tomorrow_label.show()
-            else:
-                self.tomorrow_label.hide()
 
             self.update()
             QTimer.singleShot(50, self._fit_height)
@@ -1522,7 +1444,6 @@ class Overlay(QWidget):
     def update_all(self):
         try:
             now = datetime.now()
-            weekday = now.weekday()
             current = now.hour * 60 + now.minute
             self._last_shown_time = current
 
@@ -1537,83 +1458,16 @@ class Overlay(QWidget):
                     text = f'{now.day:02d}.{now.month:02d}.{now.year}'
                 elif fmt == 'day_month':
                     text = f'{now.day} {months_ru[now.month - 1]}'
-                elif fmt == 'weekday_day_month':
-                    text = f'{weekdays_ru[weekday]}, {now.day} {months_ru[now.month - 1]}'
                 else:
-                    text = now.strftime('%d.%m.%Y')
+                    text = f'{weekdays_ru[now.weekday()]}, {now.day} {months_ru[now.month - 1]}'
                 self.date_label.setText(text)
                 self.date_label.show()
             else:
                 self.date_label.hide()
 
-            bells = get_bells(weekday)
-            if not bells:
-                self.pair_label.hide()
-                self.remain_label.hide()
-            else:
-                subjects = get_subjects(weekday)
-                real_pairs = [(i, to_minutes(bells[i][0]), to_minutes(bells[i][1]))
-                              for i in range(len(bells)) if i < len(subjects) and subjects[i]]
-                if not real_pairs:
-                    self.pair_label.hide()
-                    self.remain_label.hide()
-                else:
-                    first_start = real_pairs[0][1]
-                    last_end = real_pairs[-1][2]
-                    if current < first_start:
-                        wait = first_start - current
-                        subj = subjects[real_pairs[0][0]]
-                        self.pair_label.setText(f'Далее: {subj["name"]}\n{subj["cab"]}' if subj.get('cab') else f'Далее: {subj["name"]}')
-                        self.remain_label.setText(f'через {format_remain(wait)}')
-                        self.pair_label.show()
-                        self.remain_label.show()
-                    elif current >= last_end:
-                        self.pair_label.hide()
-                        self.remain_label.hide()
-                    else:
-                        cur = None
-                        nxt = None
-                        for i, sm, em in real_pairs:
-                            if sm <= current < em:
-                                cur = (i, sm, em)
-                                break
-                            if current < sm and nxt is None:
-                                nxt = (i, sm, em)
-                        if cur:
-                            i, sm, em = cur
-                            subj = subjects[i]
-                            remain = em - current
-                            self.pair_label.setText(f'{subj["name"]}\n{subj["cab"]}' if subj.get('cab') else subj['name'])
-                            self.remain_label.setText(f'до конца: {format_remain(remain)}')
-                            self.pair_label.show()
-                            self.remain_label.show()
-                        elif nxt:
-                            i, sm, em = nxt
-                            subj = subjects[i]
-                            wait = sm - current
-                            self.pair_label.setText(f'Далее: {subj["name"]}\n{subj["cab"]}' if subj.get('cab') else f'Далее: {subj["name"]}')
-                            self.remain_label.setText(f'через {format_remain(wait)}')
-                            self.pair_label.show()
-                            self.remain_label.show()
-                        else:
-                            self.pair_label.hide()
-                            self.remain_label.hide()
-
-            if SETTINGS.get('show_tomorrow', False):
-                pairs = get_tomorrow_pairs()
-                if not pairs:
-                    self.tomorrow_label.setText('Завтра: выходной')
-                else:
-                    lines = ['Завтра:']
-                    for num, start, end, name, cab in pairs[:4]:
-                        line = f'{num}. {name}'
-                        if cab:
-                            line += f' ({cab})'
-                        lines.append(line)
-                    self.tomorrow_label.setText('\n'.join(lines))
-                self.tomorrow_label.show()
-            else:
-                self.tomorrow_label.hide()
+            status, remain = get_status_by_bells()
+            self.status_label.setText(status)
+            self.remain_label.setText(remain)
 
             QTimer.singleShot(30, self._fit_height)
         except Exception as e:
@@ -1713,7 +1567,6 @@ class TrayApp:
         save_position(cur_x, cur_y)
         self.overlay.apply_settings()
         self.overlay.update_all()
-        print('[Reset] Оформление сброшено')
 
     def restart_widget(self):
         try:
@@ -1741,7 +1594,7 @@ class TrayApp:
 # ЗАПУСК
 # ============================================================
 if __name__ == '__main__':
-    apply_schedule_from_file()
+    apply_bells_from_file()
 
     QApplication.setQuitOnLastWindowClosed(False)
     app = QApplication(sys.argv)
