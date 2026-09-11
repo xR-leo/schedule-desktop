@@ -28,11 +28,51 @@ jobs:
         run: |
           VER=$(grep -oP 'CURRENT_VERSION\s*=\s*"\K[^"]+' overlay_empty.py)
           echo "version=$VER" >> $GITHUB_OUTPUT
+          echo "Версия: $VER"
 
       - name: Build EXE
         run: pyinstaller --onefile --windowed --name "Schedule" --clean overlay_empty.py
 
-      - name: Create Release
+      - name: Delete old release if exists
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="v${{ steps.version.outputs.version }}"
+          echo "Проверяю тег $TAG..."
+          
+          RELEASE_ID=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
+            "https://api.github.com/repos/${{ github.repository }}/releases/tags/$TAG" \
+            | grep -oP '"id":\s*\K\d+' | head -1)
+          
+          if [ -n "$RELEASE_ID" ]; then
+            echo "Найден старый релиз (ID: $RELEASE_ID). Удаляю..."
+            curl -X DELETE -H "Authorization: token $GITHUB_TOKEN" \
+              "https://api.github.com/repos/${{ github.repository }}/releases/$RELEASE_ID"
+            echo "Старый релиз удалён"
+          else
+            echo "Старый релиз не найден — создам новый"
+          fi
+
+      - name: Delete old tag if exists
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="v${{ steps.version.outputs.version }}"
+          
+          REF_EXISTS=$(curl -s -o /dev/null -w "%{http_code}" \
+            -H "Authorization: token $GITHUB_TOKEN" \
+            "https://api.github.com/repos/${{ github.repository }}/git/refs/tags/$TAG")
+          
+          if [ "$REF_EXISTS" = "200" ]; then
+            echo "Удаляю старый тег $TAG..."
+            curl -X DELETE -H "Authorization: token $GITHUB_TOKEN" \
+              "https://api.github.com/repos/${{ github.repository }}/git/refs/tags/$TAG"
+            echo "Старый тег удалён"
+          fi
+
+      - name: Create new Release
         uses: softprops/action-gh-release@v1
         with:
           tag_name: v${{ steps.version.outputs.version }}
