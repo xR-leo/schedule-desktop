@@ -77,7 +77,7 @@ jobs:
         with:
           tag_name: v${{ steps.version.outputs.version }}
           name: v${{ steps.version.outputs.version }}
-          body_path: CHANGELOG.md
+          body_path: versions/v${{ steps.version.outputs.version }}.md
           files: dist/Schedule.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
