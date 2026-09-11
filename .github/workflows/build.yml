@@ -1,0 +1,43 @@
+name: Build and Release
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install dependencies
+        run: pip install PyQt5 psutil pyinstaller
+
+      - name: Get version
+        id: version
+        shell: bash
+        run: |
+          VER=$(grep -oP 'CURRENT_VERSION\s*=\s*"\K[^"]+' overlay_empty.py)
+          echo "version=$VER" >> $GITHUB_OUTPUT
+
+      - name: Build EXE
+        run: pyinstaller --onefile --windowed --name "Schedule" --clean overlay_empty.py
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          name: v${{ steps.version.outputs.version }}
+          body: "Автоматический релиз v${{ steps.version.outputs.version }}"
+          files: dist/Schedule.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
