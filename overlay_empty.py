@@ -1119,6 +1119,139 @@ class SettingsDialog(QDialog):
         self.accept()
 
 # ============================================================
+# ЗАСТАВКА (SPLASH SCREEN)
+# ============================================================
+class SplashScreen(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.setWindowFlags(
+            Qt.FramelessWindowHint |
+            Qt.WindowStaysOnTopHint |
+            Qt.Tool |
+            Qt.WindowTransparentForInput
+        )
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        self.setAttribute(Qt.WA_NoSystemBackground)
+        self.setAutoFillBackground(False)
+        self.setFixedSize(320, 220)
+
+        layout = QVBoxLayout()
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(10)
+        layout.setAlignment(Qt.AlignCenter)
+
+        # Иконка (большая)
+        self.icon_label = QLabel()
+        self.icon_label.setAlignment(Qt.AlignCenter)
+        pixmap = QPixmap(120, 120)
+        pixmap.fill(Qt.transparent)
+        painter = QPainter(pixmap)
+        painter.setRenderHint(QPainter.Antialiasing)
+        gradient = QLinearGradient(0, 0, 120, 120)
+        gradient.setColorAt(0, QColor(40, 60, 100))
+        gradient.setColorAt(1, QColor(26, 31, 46))
+        painter.setBrush(QBrush(gradient))
+        painter.setPen(Qt.NoPen)
+        painter.drawRoundedRect(0, 0, 120, 120, 26, 26)
+        pen = painter.pen()
+        pen.setColor(QColor(183, 201, 255))
+        pen.setWidth(6)
+        painter.setPen(pen)
+        painter.setBrush(Qt.NoBrush)
+        painter.drawEllipse(24, 24, 72, 72)
+        painter.drawLine(60, 60, 60, 38)
+        painter.drawLine(60, 60, 82, 68)
+        painter.end()
+        self.icon_label.setPixmap(pixmap)
+
+        # Название
+        self.title_label = QLabel('📅 Расписание')
+        self.title_label.setAlignment(Qt.AlignCenter)
+        self.title_label.setStyleSheet(
+            'color: #ffffff; font-size: 22px; font-weight: bold;'
+        )
+
+        # Версия
+        self.version_label = QLabel(f'Версия {CURRENT_VERSION}')
+        self.version_label.setAlignment(Qt.AlignCenter)
+        self.version_label.setStyleSheet(
+            'color: #8892b0; font-size: 13px;'
+        )
+
+        layout.addWidget(self.icon_label)
+        layout.addWidget(self.title_label)
+        layout.addWidget(self.version_label)
+        self.setLayout(layout)
+
+        # Прозрачность — начнём с 0
+        self.setWindowOpacity(0.0)
+
+        # Центрирование на экране
+        self._center_on_screen()
+
+    def _center_on_screen(self):
+        """Центрирует заставку на основном экране."""
+        try:
+            screen = QApplication.primaryScreen()
+            if screen:
+                geo = screen.geometry()
+                x = (geo.width() - self.width()) // 2
+                y = (geo.height() - self.height()) // 2
+                self.move(x, y)
+        except Exception:
+            self.move(500, 300)
+
+    def paintEvent(self, event):
+        """Рисует полупрозрачный фон с размытием."""
+        try:
+            painter = QPainter(self)
+            painter.setRenderHint(QPainter.Antialiasing)
+
+            # Полупрозрачный фон
+            path = QPainterPath()
+            r = 20
+            path.addRoundedRect(QRectF(self.rect()), r, r)
+            painter.setClipPath(path)
+
+            # Градиент
+            gradient = QLinearGradient(0, 0, self.width(), self.height())
+            gradient.setColorAt(0, QColor(26, 31, 46, 240))
+            gradient.setColorAt(1, QColor(40, 60, 100, 240))
+            painter.setBrush(QBrush(gradient))
+            painter.setPen(Qt.NoPen)
+            painter.drawRoundedRect(self.rect(), r, r)
+        except Exception as e:
+            print('Ошибка в SplashScreen.paintEvent:', e)
+
+    def show_animated(self, on_finish):
+        """Показывает заставку с анимацией."""
+        self.show()
+
+        # Появление (0.5 сек)
+        self.anim_in = QPropertyAnimation(self, b'windowOpacity')
+        self.anim_in.setDuration(500)
+        self.anim_in.setStartValue(0.0)
+        self.anim_in.setEndValue(1.0)
+        self.anim_in.setEasingCurve(QEasingCurve.InOutQuad)
+        self.anim_in.start()
+        self._anim_in = self.anim_in
+
+        # Через 1.5 сек — исчезновение
+        QTimer.singleShot(1500, lambda: self._fade_out(on_finish))
+
+    def _fade_out(self, callback):
+        self.anim_out = QPropertyAnimation(self, b'windowOpacity')
+        self.anim_out.setDuration(500)
+        self.anim_out.setStartValue(1.0)
+        self.anim_out.setEndValue(0.0)
+        self.anim_out.setEasingCurve(QEasingCurve.InOutQuad)
+        self.anim_out.finished.connect(self.close)
+        if callback:
+            self.anim_out.finished.connect(callback)
+        self.anim_out.start()
+        self._anim_out = self.anim_out
+
+# ============================================================
 # ОВЕРЛЕЙ
 # ============================================================
 class Overlay(QWidget):
@@ -1698,11 +1831,19 @@ if __name__ == '__main__':
 
     QApplication.setQuitOnLastWindowClosed(False)
     app = QApplication(sys.argv)
-    app.setApplicationName(f'Расписание v{CURRENT_VERSION}')
+    app.setApplicationName('Расписание')
 
-    # Проверка обновлений через 3 секунды
-    QTimer.singleShot(3000, check_for_updates)
+    # Заставка
+    splash = SplashScreen()
 
+    # Создаём виджет (он пока невидимый)
     overlay = Overlay()
     tray = TrayApp(app, overlay)
+
+    def on_splash_finish():
+        """Когда заставка исчезла — проверяем обновления."""
+        QTimer.singleShot(500, check_for_updates)
+
+    splash.show_animated(on_splash_finish)
+
     sys.exit(app.exec_())
