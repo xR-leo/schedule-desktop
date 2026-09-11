@@ -2,6 +2,9 @@ import os
 import sys
 import json
 import math
+import urllib.request
+import tempfile
+import subprocess
 
 # --- ФИКС ПЛАГИНОВ PYQT5 ---
 try:
@@ -22,7 +25,7 @@ from PyQt5.QtWidgets import (
     QPushButton, QDialog, QComboBox, QSlider, QColorDialog,
     QCheckBox, QFormLayout, QDialogButtonBox, QSpinBox,
     QSystemTrayIcon, QMenu, QAction, QTabWidget, QSizePolicy,
-    QStackedWidget, QLineEdit, QScrollArea
+    QStackedWidget, QLineEdit, QScrollArea, QMessageBox
 )
 from PyQt5.QtCore import Qt, QTimer, QPropertyAnimation, QEasingCurve, QRectF
 from PyQt5.QtGui import (
@@ -31,13 +34,17 @@ from PyQt5.QtGui import (
 )
 
 # ============================================================
-# ПУТИ (работают и в .py, и в .exe)
+# ВЕРСИЯ ПРОГРАММЫ
+# ============================================================
+CURRENT_VERSION = "1.2"
+GITHUB_REPO = "xR-leo/schedule-desktop"  # ← ЗАМЕНИ НА СВОЙ НИК!
+
+# ============================================================
+# ПУТИ
 # ============================================================
 if getattr(sys, 'frozen', False):
-    # Запущено как .exe — берём папку с .exe
     BASE_DIR = os.path.dirname(sys.executable)
 else:
-    # Запущено как .py — берём папку со скриптом
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 DATA_DIR = os.path.join(BASE_DIR, 'data')
@@ -122,8 +129,8 @@ DEFAULT_SETTINGS = {
     'pos_x': 50,
     'pos_y': 50,
     'theme': 'custom',
-    'schedule_days': 6,           # 5 или 6 дней
-    'sunday_enabled': False,      # воскресенье — учебный?
+    'schedule_days': 6,
+    'sunday_enabled': False,
 }
 
 # ============================================================
@@ -417,7 +424,7 @@ STARTUP_LOAD_CHECKS = 3
 STARTUP_CHECK_INTERVAL = 500
 
 # ============================================================
-# ЛОГИКА (ТОЛЬКО ПО ЗВОНКАМ!)
+# ЛОГИКА
 # ============================================================
 def to_minutes(t):
     h, m = map(int, t.split(':'))
@@ -431,30 +438,25 @@ def format_remain(mins):
     return f'{h} ч {m} мин' if h else f'{m} мин'
 
 def get_status_by_bells():
-    """Возвращает статус ТОЛЬКО по звонкам с учётом дня недели."""
     global bells_monday, bells_other
 
     now = datetime.now()
-    weekday = now.weekday()  # 0=Пн, 6=Вс
+    weekday = now.weekday()
     current = now.hour * 60 + now.minute
 
     schedule_days = SETTINGS.get('schedule_days', 6)
     sunday_enabled = SETTINGS.get('sunday_enabled', False)
 
-    # Воскресенье
     if weekday == 6:
         if not sunday_enabled:
             return 'Выходной', ''
         bells = bells_other
-    # Суббота
     elif weekday == 5:
         if schedule_days < 6:
             return 'Выходной', ''
         bells = bells_other
-    # Понедельник
     elif weekday == 0:
         bells = bells_monday
-    # Вт-Пт
     else:
         bells = bells_other
 
@@ -552,12 +554,100 @@ def get_system_load():
     return cpu, ram
 
 # ============================================================
+# АВТО-ОБНОВЛЕНИЕ
+# ============================================================
+def parse_version(v):
+    try:
+        parts = v.strip().lstrip('v').split('.')
+        return tuple(int(p) for p in parts[:2])
+    except Exception:
+        return (0, 0)
+
+def check_for_updates():
+    try:
+        url = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
+        req = urllib.request.Request(url, headers={'User-Agent': 'Schedule'})
+        with urllib.request.urlopen(req, timeout=5) as r:
+            data = json.loads(r.read().decode())
+
+        latest_version = data.get('tag_name', '').lstrip('v')
+        if not latest_version:
+            return
+
+        cur_v = parse_version(CURRENT_VERSION)
+        new_v = parse_version(latest_version)
+
+        if new_v <= cur_v:
+            return
+        if not (parse_version("1.3") <= new_v <= parse_version("10.0")):
+            return
+
+        assets = data.get('assets', [])
+        exe_url = None
+        for a in assets:
+            if a['name'].lower().endswith('.exe'):
+                exe_url = a['browser_download_url']
+                break
+
+        if not exe_url:
+            return
+
+        ask_and_update(latest_version, exe_url)
+    except Exception as e:
+        print(f'[Update] Ошибка: {e}')
+
+def ask_and_update(new_version, exe_url):
+    try:
+        reply = QMessageBox.question(
+            None, 'Доступно обновление',
+            f'Вышла новая версия v{new_version}!\n\n'
+            f'Обновить сейчас?\n'
+            f'(Программа перезапустится)',
+            QMessageBox.Yes | QMessageBox.No
+        )
+
+        if reply != QMessageBox.Yes:
+            return
+
+        temp_dir = tempfile.gettempdir()
+        new_exe = os.path.join(temp_dir, 'Schedule_new.exe')
+
+        print(f'[Update] Скачиваю...')
+        req = urllib.request.Request(exe_url, headers={'User-Agent': 'Schedule'})
+        with urllib.request.urlopen(req, timeout=120) as r:
+            with open(new_exe, 'wb') as f:
+                f.write(r.read())
+
+        current_exe = sys.executable
+        bat_path = os.path.join(temp_dir, 'update_schedule.bat')
+
+        with open(bat_path, 'w', encoding='cp866') as f:
+            f.write(f'''@echo off
+timeout /t 2 /nobreak >nul
+del "{current_exe}"
+move /y "{new_exe}" "{current_exe}"
+start "" "{current_exe}"
+del "%~f0"
+''')
+
+        subprocess.Popen(
+            ['cmd', '/c', bat_path],
+            creationflags=subprocess.CREATE_NO_WINDOW
+        )
+        sys.exit(0)
+    except Exception as e:
+        try:
+            QMessageBox.warning(None, 'Ошибка', f'Не удалось обновить: {e}')
+        except Exception:
+            print(f'[Update] Ошибка: {e}')
+
+# ============================================================
 # ДИАЛОГ НАСТРОЕК
 # ============================================================
 class SettingsDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle('Настройки')
+        self.setWindowTitle(f'Настройки v{CURRENT_VERSION}')
         self.setWindowFlags(Qt.Dialog | Qt.WindowStaysOnTopHint | Qt.WindowCloseButtonHint)
         self.setMinimumWidth(480)
         self.setMinimumHeight(600)
@@ -809,7 +899,6 @@ class SettingsDialog(QDialog):
         bells_layout = QVBoxLayout(bells_widget)
         bells_layout.setContentsMargins(16, 16, 16, 16)
 
-        # Настройка дней
         days_row = QHBoxLayout()
         days_row.addWidget(QLabel('Учебных дней:'))
         self.schedule_days_combo = QComboBox()
@@ -826,7 +915,6 @@ class SettingsDialog(QDialog):
         self.chk_sunday.setChecked(SETTINGS.get('sunday_enabled', False))
         bells_layout.addWidget(self.chk_sunday)
 
-        # Заголовок Пн
         lbl_mon = QLabel('——— Понедельник ———')
         lbl_mon.setStyleSheet('color: #b7c9ff; font-weight: bold; padding-top: 10px;')
         bells_layout.addWidget(lbl_mon)
@@ -847,7 +935,6 @@ class SettingsDialog(QDialog):
             self.bell_fields_monday.append(le)
             bells_layout.addLayout(row)
 
-        # Заголовок Вт-Сб
         lbl_other = QLabel('——— Вторник-Суббота ———')
         lbl_other.setStyleSheet('color: #b7c9ff; font-weight: bold; padding-top: 10px;')
         bells_layout.addWidget(lbl_other)
@@ -864,7 +951,6 @@ class SettingsDialog(QDialog):
             self.bell_fields_other.append(le)
             bells_layout.addLayout(row)
 
-        # Кнопка сохранить
         self.btn_save_bells = QPushButton('💾 Сохранить звонки')
         self.btn_save_bells.setStyleSheet("""
             QPushButton {
@@ -893,6 +979,11 @@ class SettingsDialog(QDialog):
         self.chk_smart = QCheckBox('Умный режим')
         self.chk_smart.setChecked(self.temp['smart_load'])
         behavior_layout.addWidget(self.chk_smart)
+
+        # Информация о версии
+        version_label = QLabel(f'Версия: v{CURRENT_VERSION}')
+        version_label.setStyleSheet('color: #5a6488; font-size: 11px; padding-top: 6px;')
+        behavior_layout.addWidget(version_label)
 
         main_layout.addWidget(behavior_box)
 
@@ -1261,6 +1352,11 @@ class Overlay(QWidget):
         act_settings = QAction('⚙️ Настройки', self)
         act_settings.triggered.connect(self.open_settings)
         menu.addAction(act_settings)
+
+        act_update = QAction('🔄 Проверить обновления', self)
+        act_update.triggered.connect(check_for_updates)
+        menu.addAction(act_update)
+
         menu.addSeparator()
         act_hide = QAction('👁️ Скрыть виджет', self)
         act_hide.triggered.connect(self.hide_widget)
@@ -1482,7 +1578,7 @@ class TrayApp:
         self.overlay = overlay
 
         self.tray = QSystemTrayIcon(create_tray_icon(), app)
-        self.tray.setToolTip('Расписание')
+        self.tray.setToolTip(f'Расписание v{CURRENT_VERSION}')
 
         self.menu = QMenu()
         self.menu.setStyleSheet("""
@@ -1500,6 +1596,10 @@ class TrayApp:
         self.act_settings = QAction('⚙️ Настройки', self.menu)
         self.act_settings.triggered.connect(self.open_settings)
         self.menu.addAction(self.act_settings)
+
+        self.act_update = QAction('🔄 Проверить обновления', self.menu)
+        self.act_update.triggered.connect(check_for_updates)
+        self.menu.addAction(self.act_update)
 
         self.act_reset = QAction('🗑️ Сбросить оформление', self.menu)
         self.act_reset.triggered.connect(self.reset_settings)
@@ -1598,7 +1698,11 @@ if __name__ == '__main__':
 
     QApplication.setQuitOnLastWindowClosed(False)
     app = QApplication(sys.argv)
-    app.setApplicationName('Расписание')
+    app.setApplicationName(f'Расписание v{CURRENT_VERSION}')
+
+    # Проверка обновлений через 3 секунды
+    QTimer.singleShot(3000, check_for_updates)
+
     overlay = Overlay()
     tray = TrayApp(app, overlay)
     sys.exit(app.exec_())
